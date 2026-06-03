@@ -1,0 +1,1045 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.jfrog.bamboo</groupId>
+    <artifactId>bamboo-artifactory-plugin</artifactId>
+    <version>2026.1.2</version>
+    <name>UCSD Bamboo Artifactory Plugin</name>
+    <description>Bamboo 12.1 / Java 21 compatibility fork of the JFrog Artifactory Build Info plugin.
+        Maintained by Claudio, Claude and Summer Lombardo. Original plugin by JFrog Ltd.</description>
+    <packaging>atlassian-plugin</packaging>
+
+    <organization>
+        <name>Claudio, Claude and Summer Lombardo</name>
+        <url>http://www.jfrog.com</url>
+    </organization>
+
+    <developers>
+        <developer>
+            <name>Claudio Lombardo</name>
+            <roles><role>Fork maintainer</role></roles>
+        </developer>
+        <developer>
+            <name>Claude (Anthropic)</name>
+            <roles><role>Fork maintainer</role></roles>
+        </developer>
+        <developer>
+            <name>Summer Lombardo</name>
+            <roles><role>Fork maintainer</role></roles>
+        </developer>
+    </developers>
+
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>rjo</distribution>
+        </license>
+    </licenses>
+    <scm>
+        <url>https://github.com/audiolomb/bamboo12.1-artifactory-plugin</url>
+        <connection>scm:git:git@github.com:audiolomb/bamboo12.1-artifactory-plugin.git</connection>
+    </scm>
+
+    <properties>
+        <bamboo.version>12.1.7</bamboo.version>
+        <bamboo.data.version>${bamboo.version}</bamboo.data.version>
+        <!-- This key is used to keep the consistency between the key in atlassian-plugin.xml and the key to generate bundle. -->
+        <atlassian.plugin.key>${project.groupId}.${project.artifactId}</atlassian.plugin.key>
+        <!-- This plugin key is to be used as a unique ID of the plugin incl.
+        version and not as a key regarding the Atlassian plugin descriptor -->
+        <plugin.key>${project.groupId}.${project.artifactId}-${project.version}</plugin.key>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.version>21</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <!--Skip integration tests unless explicitly requested with -DskipITs=false-->
+        <skipITs>true</skipITs>
+        <buildinfo.version>2.41.14</buildinfo.version>
+        <buildinfo.gradle.version>4.33.13</buildinfo.gradle.version>
+        <amps.version>8.11.4</amps.version>
+    </properties>
+
+    <profiles>
+        <profile>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <id>oss</id>
+            <repositories>
+                <repository>
+                    <id>oss-releases</id>
+                    <name>jfrog-dependencies</name>
+                    <url>https://releases.jfrog.io/artifactory/oss-releases</url>
+                </repository>
+                <repository>
+                    <id>maven-atlassian-all</id>
+                    <url>https://packages.atlassian.com/mvn/maven-atlassian-all/</url>
+                    <snapshots>
+                        <enabled>true</enabled>
+                        <updatePolicy>never</updatePolicy>
+                        <checksumPolicy>warn</checksumPolicy>
+                    </snapshots>
+                    <releases>
+                        <enabled>true</enabled>
+                        <checksumPolicy>warn</checksumPolicy>
+                    </releases>
+                </repository>
+            </repositories>
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>atlassian-public</id>
+                    <url>https://maven.atlassian.com/repository/public</url>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+    </profiles>
+
+    <!-- Force modern JAXB artifact versions whose POMs do NOT reference the
+         old http://maven.java.net/ repositories. Maven 3.8.1+ blocks all
+         plain-HTTP repository access, so the old beta-build POM coordinates
+         (jaxb-api:2.3.0-b161121.1438, jaxb-runtime:2.2.x-bNNN,
+         istack-commons-runtime:3.0.6, FastInfoset:1.2.14) cause hard
+         dependency-resolution failures. These entries override any transitive
+         version that would otherwise be selected by atlassian-bamboo-web or
+         the JFrog build-info libraries. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>javax.xml.bind</groupId>
+                <artifactId>jaxb-api</artifactId>
+                <version>2.3.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.jaxb</groupId>
+                <artifactId>jaxb-runtime</artifactId>
+                <version>2.3.6</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sun.istack</groupId>
+                <artifactId>istack-commons-runtime</artifactId>
+                <version>3.0.12</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sun.xml.fastinfoset</groupId>
+                <artifactId>FastInfoset</artifactId>
+                <version>1.2.18</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+            <version>1.7.36</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>2.19.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.12.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>commons-httpclient</groupId>
+            <artifactId>commons-httpclient</artifactId>
+            <version>3.1</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.16.0</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+            <version>4.8.0.201706111038-r</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.jcraft</groupId>
+                    <artifactId>jsch</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents</groupId>
+                    <artifactId>httpclient</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-api</artifactId>
+            <version>${buildinfo.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>guava</artifactId>
+                    <groupId>com.google.guava</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-client</artifactId>
+            <version>${buildinfo.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>guava</artifactId>
+                    <groupId>com.google.guava</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-vcs</artifactId>
+            <version>${buildinfo.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>guava</artifactId>
+                    <groupId>com.google.guava</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-extractor</artifactId>
+            <version>${buildinfo.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>guava</artifactId>
+                    <groupId>com.google.guava</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-extractor-gradle</artifactId>
+            <version>${buildinfo.gradle.version}</version>
+            <classifier>uber</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.code.findbugs</groupId>
+                    <artifactId>jsr305</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-extractor-nuget</artifactId>
+            <version>${buildinfo.version}</version>
+            <classifier>uber</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-extractor-npm</artifactId>
+            <version>${buildinfo.version}</version>
+            <classifier>uber</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-extractor-docker</artifactId>
+            <version>${buildinfo.version}</version>
+            <classifier>uber</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>jcl-over-slf4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-extractor-ivy</artifactId>
+            <version>${buildinfo.version}</version>
+            <classifier>uber</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.code.findbugs</groupId>
+                    <artifactId>jsr305</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jfrog.buildinfo</groupId>
+            <artifactId>build-info-extractor-maven3</artifactId>
+            <version>${buildinfo.version}</version>
+            <classifier>uber</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.codehaus.groovy</groupId>
+                    <artifactId>groovy-all</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>2.14.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.14.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.atlassian.bamboo</groupId>
+            <artifactId>atlassian-bamboo-web</artifactId>
+            <version>${bamboo.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <!-- Exclude 'stax2-api' to prevent classloader issue, this dependency is provided by 'build-info-extractor-nuget' -->
+                <exclusion>
+                    <groupId>org.codehaus.woodstox</groupId>
+                    <artifactId>stax2-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.h2database</groupId>
+                    <artifactId>h2</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>jcl-over-slf4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <!-- Atlassian-patched ehcache build not published to any public repo;
+                     Bamboo provides it at runtime so it is safe to exclude from resolution -->
+                <exclusion>
+                    <groupId>net.sf.ehcache</groupId>
+                    <artifactId>ehcache</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.2.220</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.atlassian.labs</groupId>
+            <artifactId>rest-api-browser</artifactId>
+            <version>3.2.3</version>
+        </dependency>
+
+        <!-- Bamboo Platform 7 (10+) removed com.opensymphony.module.propertyset from OSGi
+             exports. Bamboo's plugin transformer generates a mandatory version-constrained
+             import that can never resolve. Bundling propertyset satisfies the reference
+             locally so the transformer does not generate an Import-Package entry — the
+             bundled version does not need to match the constraint because classes are
+             resolved from Bundle-ClassPath, not via OSGi import.
+             opensymphony:propertyset:1.3 is the only publicly available version on Maven Central. -->
+        <dependency>
+            <groupId>opensymphony</groupId>
+            <artifactId>propertyset</artifactId>
+            <version>1.3</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- Required on compiler classpath: Bamboo 12.1 uses Jakarta EE and hibernate-jpamodelgen
+             (auto-discovered annotation processor) references jakarta.xml.bind.JAXBException at init.
+             Bamboo provides this at runtime; provided scope keeps it off the plugin bundle. -->
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+            <version>4.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>javax.inject</groupId>
+            <artifactId>javax.inject</artifactId>
+            <version>1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>javax.ws.rs</groupId>
+            <artifactId>jsr311-api</artifactId>
+            <version>1.1.1</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.atlassian.bamboo</groupId>
+            <artifactId>atlassian-bamboo-api</artifactId>
+            <version>${bamboo.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.tek42.perforce</groupId>
+                    <artifactId>p4java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>net.sf.ehcache</groupId>
+                    <artifactId>ehcache</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.atlassian.bamboo</groupId>
+            <artifactId>atlassian-bamboo-core</artifactId>
+            <version>${bamboo.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.tek42.perforce</groupId>
+                    <artifactId>p4java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>net.sf.ehcache</groupId>
+                    <artifactId>ehcache</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-core</artifactId>
+            <version>3.9.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>javax.annotation</groupId>
+                    <artifactId>javax.annotation-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-embedder</artifactId>
+            <version>3.8.7</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.guava</groupId>
+                    <artifactId>guava</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>javax.annotation</groupId>
+                    <artifactId>javax.annotation-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.jcraft</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.1.55</version>
+        </dependency>
+
+        <!-- WIRED TEST RUNNER DEPENDENCIES -->
+        <dependency>
+            <groupId>com.atlassian.plugins</groupId>
+            <artifactId>atlassian-plugins-osgi-testrunner</artifactId>
+            <version>2.0.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.jfrog.testing</groupId>
+            <artifactId>jfrog-testing-infra</artifactId>
+            <version>1.1.1</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>log4j-over-slf4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>jcl-over-slf4j</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-text</artifactId>
+            <version>1.10.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.atlassian.plugins</groupId>
+            <artifactId>atlassian-plugins-osgi</artifactId>
+            <version>7.1.1</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- provided: Bamboo 12.1 ships spring-scanner-annotation as a global plugin
+             (com.atlassian.plugin.atlassian-spring-scanner-annotation). Bundling it caused
+             Bamboo's own plugin transformer to analyze its bytecode and inject a mandatory
+             com.opensymphony.module.propertyset;version=1.6.0.atlassian_8 import, which
+             Bamboo 12.1 no longer exports at that exact version. With provided scope the jar
+             stays on the compile classpath (so @Component etc. resolve) but is not bundled. -->
+        <dependency>
+            <groupId>com.atlassian.plugin</groupId>
+            <artifactId>atlassian-spring-scanner-annotation</artifactId>
+            <version>1.2.13</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- provided: Bamboo 12.1 ships spring-scanner-runtime as a global plugin
+             (com.atlassian.plugin.atlassian-spring-scanner-runtime). Bundling it ourselves
+             caused a com.opensymphony.module.propertyset version constraint conflict because
+             the 1.2.13 jar's MANIFEST.MF pins an Atlassian-internal version that Bamboo 12.1
+             no longer exports at that exact version. -->
+        <dependency>
+            <groupId>com.atlassian.plugin</groupId>
+            <artifactId>atlassian-spring-scanner-runtime</artifactId>
+            <version>1.2.13</version>
+            <scope>provided</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <!-- Copy src/main/resources/ to target/classes/.
+        filtering=true means that the resources variables ${ENV_KEY} will be replaced by ENV_VALUE.
+        filtering=false means that the resource are copied from the source to the target dir without changes.
+        "classworlds-freestyle.conf" contains variables such as ${maven.home} that we want to keep during plugin's
+        build and replace later, during running of Bamboo tasks. -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <excludes>
+                    <exclude>maven3/classworlds-freestyle.conf</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <includes>
+                    <include>maven3/classworlds-freestyle.conf</include>
+                </includes>
+            </resource>
+        </resources>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>remove-stale-plugin-artifacts</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete quiet="true">
+                                    <fileset dir="${project.build.directory}" erroronmissingdir="false">
+                                        <include name="${project.artifactId}-*.jar"/>
+                                        <include name="${project.artifactId}-*.obr"/>
+                                    </fileset>
+                                </delete>
+                                <delete dir="${project.build.directory}/obr" quiet="true"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>com.atlassian.maven.plugins</groupId>
+                <artifactId>bamboo-maven-plugin</artifactId>
+                <version>${amps.version}</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <productVersion>${bamboo.version}</productVersion>
+                    <productDataVersion>${bamboo.data.version}</productDataVersion>
+                    <enableQuickReload>true</enableQuickReload>
+                    <productDataPath>${basedir}/src/test/resources/bamboo-home.zip</productDataPath>
+                    <jvmArgs>-Xms512m -Xmx1024m -server
+                        -Datlassian.bamboo.build.disable=true -Datlassian.bamboo.branch.detection.disable=true
+                        -Datlassian.bamboo.closed.branch.detection.disable=true
+                    </jvmArgs>
+                    <systemPropertyVariables>the active branch
+                        <GIT_BRANCH>${git.branch}</GIT_BRANCH>
+                    </systemPropertyVariables>
+                    <extractDependencies>false</extractDependencies>
+                    <instructions>
+                        <!-- Export propertyset at the exact version the Bamboo transformer demands.
+                             Bamboo Platform 7 removed com.opensymphony.module.propertyset from its
+                             OSGi exports. The transformer still generates a mandatory Import-Package
+                             for this package at version 1.6.0.atlassian_8 (found via transitive class
+                             analysis through Bamboo action base classes). Since no external bundle
+                             provides it, we export it ourselves from our bundled propertyset-1.3 jar
+                             at the exact required version so the OSGi resolver can wire our bundle's
+                             import to our bundle's own export (standard OSGi self-import resolution). -->
+                        <Export-Package>
+                            com.opensymphony.module.propertyset.*;version="1.6.0.atlassian_8"
+                        </Export-Package>
+
+                        <!-- BND package-import control for Bamboo 12.1 DmzResolverHook compatibility.
+                             Bamboo 12.1 blocks "internal" OSGi packages at bundle resolution time.
+                             The packages below are referenced only inside bundled transitive
+                             dependencies (not in the plugin's own Java source) and must not
+                             appear as hard Import-Package entries in the bundle manifest.
+
+                             Sources of each blocked reference:
+                               com.fasterxml.jackson.dataformat.yaml  - log4j-core-2.19.0 (optional import)
+                               org.glassfish.jersey.http              - jersey-client-3.1.11 Import-Package
+                               org.glassfish.jersey.innate.inject.spi - jersey-hk2-3.1.11 Import-Package
+                               org.glassfish.jersey.innate.io         - jersey-client-3.1.11 and jersey-apache-connector-3.1.11
+                               org.glassfish.jersey.innate.spi        - jersey-client-3.1.11 Import-Package
+                               org.objectweb.asm                      - xbean-reflect-3.7 (optional import)
+                               org.objectweb.asm.commons              - xbean-reflect-3.7 (optional import)
+                               com.opensymphony.module.propertyset    - transitively referenced from bundled deps
+                        -->
+                        <Import-Package>
+                            <!-- Previously fixed: DmzResolverHook "internal" packages -->
+                            !com.fasterxml.jackson.dataformat.yaml,
+                            !org.glassfish.jersey.http,
+                            !org.glassfish.jersey.innate.inject.spi,
+                            !org.glassfish.jersey.innate.io,
+                            !org.glassfish.jersey.innate.spi,
+                            !org.objectweb.asm,
+                            !org.objectweb.asm.commons,
+                            <!-- ant-1.10.12 bytecode references com.opensymphony.module.propertyset.
+                                 Bamboo Platform 7 (10+) removed propertyset from OSGi exports.
+                                 We bundle propertyset directly so the class is satisfied locally
+                                 and no import is generated. -->
+                            !com.opensymphony.module.propertyset,
+                            !com.opensymphony.module.propertyset.*,
+
+                            <!-- Jira/Confluence packages: absent from Bamboo-only deployments -->
+                            !com.atlassian.jira.plugin.rpc,
+                            !com.atlassian.jira.util,
+                            !com.atlassian.confluence.plugin.descriptor.rpc,
+
+                            <!-- Spring OSGi DM (Spring DM): replaced by Gemini Blueprint in Bamboo 12.1 -->
+                            !org.springframework.osgi.context,
+                            !org.springframework.osgi.service.exporter.support,
+                            !org.springframework.osgi.service.importer.support,
+
+                            <!-- javax.servlet / javax.ws.rs: Bamboo 12.1 uses jakarta.* namespace -->
+                            !javax.servlet,
+                            !javax.servlet.http,
+                            !javax.ws.rs,
+                            !javax.ws.rs.*,
+
+                            <!-- JDK-internal / AWT / Swing: never exported by OSGi framework -->
+                            !javax.imageio,
+                            !javax.imageio.spi,
+                            !javax.imageio.stream,
+                            !javax.swing,
+                            !javax.swing.border,
+                            !javax.swing.event,
+                            !javax.swing.table,
+                            !javax.swing.text,
+                            !javax.swing.tree,
+                            !javax.tools,
+                            !sun.misc,
+                            !sun.security.util,
+                            !sun.security.x509,
+                            !com.sun.jdi,
+                            !com.sun.jdi.connect,
+                            !com.sun.jdi.event,
+                            !com.sun.jdi.request,
+                            !com.oracle.svm.core.annotate,
+
+                            <!-- Third-party libs bundled inside uber-jars or unavailable in Bamboo 12.1 OSGi -->
+                            !ch.qos.logback.classic,
+                            !com.aayushatharva.brotli4j,
+                            !com.aayushatharva.brotli4j.decoder,
+                            !com.aayushatharva.brotli4j.encoder,
+                            !com.conversantmedia.util.concurrent,
+                            !com.github.luben.zstd,
+                            !com.github.luben.zstd.util,
+                            !com.google.inject.servlet,
+                            !com.google.protobuf,
+                            !com.google.protobuf.nano,
+                            !com.jcraft.jsch.agentproxy,
+                            !com.lmax.disruptor,
+                            !com.lmax.disruptor.dsl,
+                            !com.ning.compress,
+                            !com.ning.compress.lzf,
+                            !com.ning.compress.lzf.util,
+                            !com.sun.jna,
+                            !com.sun.jna.win32,
+                            !groovy.lang,
+                            !groovy.transform,
+                            !io.netty.internal.tcnative,
+                            !jakarta.validation,
+                            !jakarta.validation.metadata,
+                            !javax.enterprise.inject,
+                            !javax.jms,
+                            !javax.mail,
+                            !javax.mail.internet,
+                            !javax.mail.util,
+                            !javax.script,
+                            !javax.transaction.xa,
+                            !lzma.sdk,
+                            !lzma.sdk.lzma,
+                            !net.jpountz.lz4,
+                            !net.jpountz.xxhash,
+                            !org.acegisecurity.acls,
+                            !org.apache.avalon.framework.logger,
+                            !org.apache.commons.collections.map,
+                            !org.apache.commons.configuration,
+                            !org.apache.commons.csv,
+                            !org.apache.commons.vfs2,
+                            !org.apache.commons.vfs2.impl,
+                            !org.apache.kafka.clients.producer,
+                            !org.apache.log,
+                            !org.apache.lucene.analysis,
+                            !org.apache.lucene.analysis.standard,
+                            !org.apache.lucene.document,
+                            !org.apache.lucene.index,
+                            !org.apache.lucene.queryparser.flexible.standard,
+                            !org.apache.lucene.search,
+                            !org.apache.lucene.store,
+                            !org.apache.oro.text,
+                            !org.apache.oro.text.regex,
+                            !org.apache.xbean.asm,
+                            !org.apache.xbean.asm.commons,
+                            !org.brotli.dec,
+                            !org.codehaus.groovy.reflection,
+                            !org.codehaus.groovy.runtime,
+                            !org.codehaus.groovy.runtime.callsite,
+                            !org.codehaus.groovy.runtime.typehandling,
+                            !org.codehaus.groovy.runtime.wrappers,
+                            !org.conscrypt,
+                            !org.eclipse.jetty.alpn,
+                            !org.eclipse.jetty.npn,
+                            !org.fusesource.jansi,
+                            !org.gradle.*,
+                            !org.hibernate.validator,
+                            !org.jaxen,
+                            !org.jaxen.saxpath,
+                            !org.jaxen.util,
+                            !org.jboss.marshalling,
+                            !org.jctools.queues,
+                            <!-- org.joda.time removed from exclusions: exported by both Bamboo
+                                 server and remote agent OSGi containers; needed at runtime by
+                                 task classes (e.g. ArtifactoryGenericDeployTask.initTask) -->
+                            !org.locationtech.jts.geom,
+                            !org.locationtech.jts.geom.impl,
+                            !org.testng.annotations,
+                            !org.tmatesoft.svn.core,
+                            !org.tukaani.xz,
+                            !org.zeromq,
+                            !reactor.blockhound,
+                            !reactor.blockhound.integration,
+
+                            <!-- JUnit test packages — bundled JFrog libs include test code.
+                                 Not used in plugin source; not exported by Bamboo 12.1 OSGi. -->
+                            !junit.framework,
+                            !org.junit,
+
+                            <!-- BouncyCastle — from bundled JFrog PGP signing libs.
+                                 Not used in plugin source; not exported by Bamboo 12.1 OSGi. -->
+                            !org.bouncycastle.bcpg,
+                            !org.bouncycastle.openpgp,
+                            !org.bouncycastle.openpgp.*,
+
+                            <!-- org.osgi.service.jdbc — from bundled h2-2.2.220 which implements
+                                 DataSourceFactory. Not used in plugin source; this OSGi Compendium
+                                 package is not exported by Bamboo 12.1's Felix runtime. -->
+                            !org.osgi.service.jdbc,
+
+                            <!-- From bundled rest-api-browser-3.2.3; not used in plugin source.
+                                 Package not exported by atlassian-rest-v2-plugin in Bamboo 12.1. -->
+                            !com.atlassian.plugins.rest.common.security,
+
+                            <!-- javax.activation / javax.xml.bind*: Both removed from JDK in Java 11+
+                                 and migrated to jakarta.* in Jakarta EE 9. Bamboo 12.1 exports
+                                 jakarta.activation and jakarta.xml.bind, not the old javax.* versions.
+                                 These come from bundled jars only; not used in plugin source. -->
+                            !javax.activation,
+                            !javax.xml.bind,
+                            !javax.xml.bind.*,
+
+                            <!-- All imports are optional so the bundle resolves on both the
+                                 Bamboo server (full stack) and remote agents (task-essential
+                                 packages only). Agent OSGi containers do not export server-only
+                                 packages (com.atlassian.bamboo.ww2.*, com.atlassian.sal.api.*,
+                                 etc.) so com.atlassian.*;resolution:=mandatory broke agents.
+                                 At runtime, any package that isn't available will surface as
+                                 NoClassDefFoundError only if that code path is actually executed
+                                 on the agent — which it won't be for task execution paths. -->
+                            jakarta.servlet;resolution:=optional,
+                            jakarta.servlet.http;resolution:=optional,
+
+                            <!-- Everything else is auto-detected from bundled uber-jars.
+                                 Mark optional so missing packages don't block bundle resolution. -->
+                            *;resolution:=optional
+                        </Import-Package>
+                    </instructions>
+                    <products>
+                        <product>
+                            <id>bamboo</id>
+                            <instanceId>bambooExpected</instanceId>
+                            <version>${bamboo.version}</version>
+                            <productDataVersion>${bamboo.version}</productDataVersion>
+                        </product>
+                    </products>
+                    <testGroups>
+                        <testGroup>
+                            <id>it</id>
+                            <productIds>
+                                <productId>bamboo</productId>
+                            </productIds>
+                            <includes>
+                                <include>it/org/jfrog/bamboo/*Test.java</include>
+                            </includes>
+                        </testGroup>
+                    </testGroups>
+
+                    <pluginArtifacts>
+                        <pluginArtifact>
+                            <groupId>com.zuhlke.testing</groupId>
+                            <artifactId>atlassian-plugin-test-console-enabler</artifactId>
+                            <version>1.0.1</version>
+                        </pluginArtifact>
+                    </pluginArtifacts>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>com.atlassian.plugin</groupId>
+                <artifactId>atlassian-spring-scanner-maven-plugin</artifactId>
+                <version>1.2.13</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>atlassian-spring-scanner</goal>
+                        </goals>
+                        <phase>process-classes</phase>
+                    </execution>
+                </executions>
+                <configuration>
+                    <scannedDependencies>
+                        <dependency>
+                            <groupId>com.atlassian.plugin</groupId>
+                            <artifactId>atlassian-spring-scanner-external-jar</artifactId>
+                        </dependency>
+                    </scannedDependencies>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.1.2</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--This plugin Injects the git branch. We use ${git.branch} to run the tests locally on the active branch.-->
+            <plugin>
+                <groupId>pl.project13.maven</groupId>
+                <artifactId>git-commit-id-plugin</artifactId>
+                <version>4.0.3</version>
+                <executions>
+                    <execution>
+                        <id>get-the-git-infos</id>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                        <phase>initialize</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>2.3</version>
+                <executions>
+                    <execution>
+                        <id>unpack-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>unpack-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <excludes>META-INF/**/*</excludes>
+                            <excludeClassifiers>uber</excludeClassifiers>
+                            <includeArtifactIds>
+                                build-info-api,build-info-client,build-info-extractor,build-info-extractor-maven3,build-info-vcs,p4java-jfrog,org.eclipse.jgit
+                            </includeArtifactIds>
+                            <outputDirectory>${project.build.directory}/classes</outputDirectory>
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.jfrog.buildinfo</groupId>
+                                    <artifactId>build-info-extractor-maven3</artifactId>
+                                    <version>${buildinfo.version}</version>
+                                    <type>jar</type>
+                                    <classifier>uber</classifier>
+                                    <overWrite>true</overWrite>
+                                    <outputDirectory>${project.build.directory}/classes/META-INF/lib</outputDirectory>
+                                    <destFileName>build-info-extractor-maven3-${buildinfo.version}-uber.jar
+                                    </destFileName>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.jfrog.buildinfo</groupId>
+                                    <artifactId>build-info-extractor-gradle</artifactId>
+                                    <version>${buildinfo.gradle.version}</version>
+                                    <type>jar</type>
+                                    <classifier>uber</classifier>
+                                    <overWrite>true</overWrite>
+                                    <outputDirectory>${project.build.directory}/classes/META-INF/lib</outputDirectory>
+                                    <destFileName>build-info-extractor-gradle-${buildinfo.gradle.version}-uber.jar
+                                    </destFileName>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.jfrog.buildinfo</groupId>
+                                    <artifactId>build-info-extractor-nuget</artifactId>
+                                    <version>${buildinfo.version}</version>
+                                    <type>jar</type>
+                                    <classifier>uber</classifier>
+                                    <overWrite>true</overWrite>
+                                    <outputDirectory>${project.build.directory}/classes/META-INF/lib</outputDirectory>
+                                    <destFileName>build-info-extractor-nuget-${buildinfo.version}-uber.jar
+                                    </destFileName>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.jfrog.buildinfo</groupId>
+                                    <artifactId>build-info-extractor-npm</artifactId>
+                                    <version>${buildinfo.version}</version>
+                                    <type>jar</type>
+                                    <classifier>uber</classifier>
+                                    <overWrite>true</overWrite>
+                                    <outputDirectory>${project.build.directory}/classes/META-INF/lib</outputDirectory>
+                                    <destFileName>build-info-extractor-npm-${buildinfo.version}-uber.jar
+                                    </destFileName>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.jfrog.buildinfo</groupId>
+                                    <artifactId>build-info-extractor-docker</artifactId>
+                                    <version>${buildinfo.version}</version>
+                                    <type>jar</type>
+                                    <classifier>uber</classifier>
+                                    <overWrite>true</overWrite>
+                                    <outputDirectory>${project.build.directory}/classes/META-INF/lib</outputDirectory>
+                                    <destFileName>build-info-extractor-docker-${buildinfo.version}-uber.jar
+                                    </destFileName>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>org.jfrog.buildinfo</groupId>
+                                    <artifactId>build-info-extractor-ivy</artifactId>
+                                    <version>${buildinfo.version}</version>
+                                    <type>jar</type>
+                                    <classifier>uber</classifier>
+                                    <overWrite>true</overWrite>
+                                    <outputDirectory>${project.build.directory}/classes/META-INF/lib</outputDirectory>
+                                    <destFileName>build-info-extractor-ivy-${buildinfo.version}-uber.jar
+                                    </destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>com.atlassian.maven.plugins</groupId>
+                    <artifactId>amps-dispatcher-maven-plugin</artifactId>
+                    <version>8.2.0</version>
+                </plugin>
+                <plugin>
+                    <artifactId>com.atlassian.upm.atlassian-universal-plugin-manager-plugin</artifactId>
+                    <version>4.0.16</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>
