@@ -1,0 +1,54 @@
+[@ui.bambooSection titleKey='artifactory.task.generic.resolve.title']
+
+    [@ww.select name='builder.artifactoryGenericBuilder.artifactoryServerId' labelKey='artifactory.task.maven.artifactoryServerUrl' list=allServerConfigMaps
+    listKey='id' listValue='url' emptyOption=true toggle=true/]
+    <div id="genericArtifactoryConfigDiv">
+        [@ww.select labelKey='artifactory.task.overrideCredentials' name='resolver.overrideCredentialsChoice' listKey='key' listValue='value' toggle=true list=overrideCredentialsOptions/]
+        [#--  No credentials overriding  --]
+        [@ui.bambooSection dependsOn='resolver.overrideCredentialsChoice' showOn='noOverriding'/]
+        [#--  Username and password  --]
+        [@ui.bambooSection dependsOn='resolver.overrideCredentialsChoice' showOn='usernamePassword']
+            [@ww.textfield name='artifactory.generic.username' labelKey='artifactory.task.maven.resolverUsername'/]
+            [@ww.password name='artifactory.generic.password' labelKey='artifactory.task.maven.resolverPassword' showPassword='true'/]
+        [/@ui.bambooSection]
+        [#--  Use shared credentials  --]
+        [@ui.bambooSection dependsOn='resolver.overrideCredentialsChoice' showOn='sharedCredentials']
+            [@ww.select name='resolver.sharedCredentials' labelKey='artifactory.task.sharedCredentials' list=allCredentialMaps
+            listKey='name' listValue='name' toggle=true/]
+        [/@ui.bambooSection]
+
+        [@ww.radio labelKey='Download by' name='artifactory.generic.useSpecsChoice' listKey='key' listValue='value' toggle=true list=useSpecsOptions toggle=true/]
+        [@ui.bambooSection dependsOn='artifactory.generic.useSpecsChoice' showOn='specs']
+            [@ww.select labelKey='artifactory.task.generic.resolvePatternFileSpec' name='artifactory.generic.specSourceChoice' listKey='key' listValue='value' toggle=true list=specSourceOptions/]
+            [@ui.bambooSection dependsOn='artifactory.generic.specSourceChoice' showOn='jobConfiguration']
+                [@ww.textarea name='artifactory.generic.jobConfiguration' labelKey='artifactory.task.generic.resolvePatternFileSpec.jobConfiguration' rows='10' cols='80' cssClass="long-field" /]
+            [/@ui.bambooSection]
+            [@ui.bambooSection dependsOn='artifactory.generic.specSourceChoice' showOn='file']
+                [@ww.textarea name='artifactory.generic.file' labelKey='artifactory.task.generic.resolvePatternFileSpec.file' rows='1' cols='80' cssClass="long-field" /]
+            [/@ui.bambooSection]
+        [/@ui.bambooSection]
+        [@ui.bambooSection dependsOn='artifactory.generic.useSpecsChoice' showOn='legacyPatterns']
+            [@ww.textarea name='artifactory.generic.resolvePattern' labelKey='artifactory.task.generic.resolvePattern' rows='10' cols='80' cssClass="long-field" /]
+        [/@ui.bambooSection]
+        <div style="visibility:hidden; position:absolute; height:0; overflow:hidden;">
+        [@ww.checkbox name='buildInfoAggregation' toggle=true/]
+        </div>
+        [@ww.checkbox labelKey='artifactory.task.captureBuildInfo' name='captureBuildInfo' toggle=true/]
+
+        [@ui.bambooSection dependsOn='captureBuildInfo' showOn=true]
+            [#include '../task/editBuildNameNumberSnippet.ftl'/]
+            [#include 'editEnvSnippet.ftl'/]
+        [/@ui.bambooSection]
+
+    </div>
+[/@ui.bambooSection]
+
+<script>
+    var useSpecsDiv = document.getElementById('artifactory_generic_useSpecsChoicespecs').parentNode;
+    var useSpecslegacyPatternDiv = document.getElementById('artifactory_generic_useSpecsChoicelegacyPatterns').parentNode;
+    useSpecsDiv.style.float = useSpecslegacyPatternDiv.style.float = 'left';
+    useSpecsDiv.style.padding = useSpecslegacyPatternDiv.style.padding = '5px 0 0 20px';
+    useSpecsDiv.style.margin = useSpecslegacyPatternDiv.style.margin = '0 0 0 20px';
+</script>
+
+[#include '../task/ensureTaskPlanKey.ftl'/]
