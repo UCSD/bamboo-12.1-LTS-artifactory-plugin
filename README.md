@@ -41,7 +41,7 @@ plugin. Existing plans continue working after the Bamboo upgrade with no changes
 
 ## Installation
 
-1. Download the latest JAR from [Releases]([https://github.com/UCSD/bamboo-12.1-LTS-artifactory-plugin/releases])
+1. Download the latest JAR from [Releases](https://github.com/audiolomb/bamboo12.1-artifactory-plugin/releases)
 2. In Bamboo: **Administration → Manage apps → Upload app**
 3. Select the JAR and upload
 4. The plugin will appear as **UCSD Bamboo Artifactory Plugin** in the app list
@@ -53,7 +53,7 @@ plugin. Existing plans continue working after the Bamboo upgrade with no changes
 Requirements: Java 21, Maven 3.8+
 
 ```bash
-git clone https://github.com/audiolomb/bamboo12.1-artifactory-plugin.git
+git clone https://github.com/ucsd/bamboo12.1-artifactory-plugin.git
 cd bamboo12.1-artifactory-plugin
 mvn clean package -DskipTests
 # Output: target/bamboo-artifactory-plugin-{version}.jar
